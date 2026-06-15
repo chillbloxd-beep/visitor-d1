@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>D1 Analytics Dashboard</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { max-width: 1250px; margin: 32px auto; padding: 0 20px 60px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; position: sticky; top: 0; padding: 12px 0; background: Canvas; z-index: 2; }
+    input, button, select { padding: 10px 12px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 9px; }
+    input { min-width: 300px; }
+    button { cursor: pointer; background: currentColor; color: Canvas; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 18px 0 30px; }
+    .card, section { border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 14px; padding: 15px; }
+    .value { font-size: 1.8rem; font-weight: 750; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 15px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { padding: 8px; border-bottom: 1px solid color-mix(in srgb, currentColor 13%, transparent); text-align: left; vertical-align: top; }
+    .table-wrap { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+    .muted { opacity: .7; }
+    .online { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Visitor Analytics V2</h1>
+  <div class="toolbar">
+    <input id="key" type="password" autocomplete="off" placeholder="Admin key">
+    <select id="days">
+      <option value="7">7 days</option>
+      <option value="30" selected>30 days</option>
+      <option value="90">90 days</option>
+      <option value="365">365 days</option>
+    </select>
+    <button id="load">Load dashboard</button>
+  </div>
+  <p id="message" class="muted">The key stays in this browser tab only.</p>
+
+  <div id="cards" class="cards"></div>
+
+  <div class="grid">
+    <section>
+      <h2>Live visitors: <span id="online" class="online">0</span></h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Last seen</th><th>Location</th><th>Device</th><th>Page</th></tr></thead>
+          <tbody id="live"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Top pages</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Page</th><th>Views</th><th>Active</th><th>Scroll</th></tr></thead>
+          <tbody id="pages"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Traffic sources</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Source</th><th>Medium</th><th>Sessions</th></tr></thead>
+          <tbody id="sources"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Performance</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Metric</th><th>Average</th><th>Samples</th></tr></thead>
+          <tbody id="performance"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section style="margin-top:15px">
+    <h2>Recent sessions</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Started</th><th>Country/city</th><th>Device</th><th>Source</th><th>Landing → Exit</th><th>Views</th><th>Active</th></tr></thead>
+        <tbody id="sessions"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section style="margin-top:15px">
+    <h2>Recent grouped errors</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Last seen</th><th>Error</th><th>Page</th><th>Occurrences</th><th>Sessions</th></tr></thead>
+        <tbody id="errors"></tbody>
+      </table>
+    </div>
+  </section>
+
+<script>
+  const elements = Object.fromEntries(
+    ["key","days","load","message","cards","online","live","pages","sources","performance","sessions","errors"]
+      .map((id) => [id, document.getElementById(id)])
+  );
+
+  const escapeHtml = (value) => String(value ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+
+  const formatMs = (value) => {
+    const seconds = Math.round(Number(value || 0) / 1000);
+    return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
+  };
+
+  async function api(path, key) {
+    const response = await fetch(path, { headers: { Authorization: `Bearer ${key}` } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Request failed");
+    return data;
+  }
+
+  function rows(target, data, render) {
+    target.innerHTML = data.length
+      ? data.map(render).join("")
+      : '<tr><td colspan="10" class="muted">No data</td></tr>';
+  }
+
+  async function load() {
+    const key = elements.key.value.trim();
+    if (!key) return void (elements.message.textContent = "Enter the admin key.");
+
+    sessionStorage.setItem("analytics_admin_key", key);
+    elements.message.textContent = "Loading…";
+    const days = elements.days.value;
+
+    try {
+      const [overview, live, sessions, errors] = await Promise.all([
+        api(`/api/admin/overview?days=${days}`, key),
+        api("/api/admin/live", key),
+        api("/api/admin/sessions?limit=100", key),
+        api("/api/admin/errors?limit=100", key)
+      ]);
+
+      const t = overview.totals || {};
+      elements.cards.innerHTML = [
+        ["Unique visitors", t.unique_visitors],
+        ["New visitors", t.new_visitors],
+        ["Sessions", t.sessions],
+        ["Page views", t.page_views],
+        ["Average active time", formatMs(t.avg_active_ms)],
+        ["Custom events", t.events],
+        ["Errors", t.errors]
+      ].map(([label, value]) => `<article class="card"><div>${escapeHtml(label)}</div><div class="value">${escapeHtml(value ?? 0)}</div></article>`).join("");
+
+      elements.online.textContent = live.online;
+      rows(elements.live, live.visitors, (v) => `<tr><td>${escapeHtml(v.last_seen_at)}</td><td>${escapeHtml([v.country,v.city].filter(Boolean).join(", ") || "Unknown")}</td><td>${escapeHtml(v.device_type || "Unknown")}</td><td>${escapeHtml(v.path)}</td></tr>`);
+      rows(elements.pages, overview.topPages, (p) => `<tr><td>${escapeHtml(p.path)}</td><td>${escapeHtml(p.page_views)}</td><td>${escapeHtml(formatMs(p.avg_active_ms))}</td><td>${escapeHtml(p.avg_scroll_pct)}%</td></tr>`);
+      rows(elements.sources, overview.topSources, (s) => `<tr><td>${escapeHtml(s.source)}</td><td>${escapeHtml(s.medium)}</td><td>${escapeHtml(s.sessions)}</td></tr>`);
+      rows(elements.performance, overview.performance, (p) => `<tr><td>${escapeHtml(p.metric_name)}</td><td>${escapeHtml(p.average)}</td><td>${escapeHtml(p.samples)}</td></tr>`);
+      rows(elements.sessions, sessions.sessions, (s) => `<tr><td>${escapeHtml(s.started_at)}</td><td>${escapeHtml([s.country,s.city].filter(Boolean).join(", ") || "Unknown")}</td><td>${escapeHtml([s.device_type,s.browser_name,s.os_name].filter(Boolean).join(" / "))}</td><td>${escapeHtml([s.source,s.medium,s.campaign].filter(Boolean).join(" / ") || "Direct")}</td><td>${escapeHtml(s.landing_path)} → ${escapeHtml(s.exit_path || "")}</td><td>${escapeHtml(s.page_views)}</td><td>${escapeHtml(formatMs(s.active_ms))}</td></tr>`);
+      rows(elements.errors, errors.errors, (e) => `<tr><td>${escapeHtml(e.last_seen_at)}</td><td>${escapeHtml(e.message)}</td><td>${escapeHtml(e.path || "")}</td><td>${escapeHtml(e.occurrences)}</td><td>${escapeHtml(e.affected_sessions)}</td></tr>`);
+
+      elements.message.textContent = `Loaded ${days} days of analytics.`;
+    } catch (error) {
+      elements.message.textContent = error.message;
+    }
+  }
+
+  elements.key.value = sessionStorage.getItem("analytics_admin_key") || "";
+  elements.load.addEventListener("click", load);
+  if (elements.key.value) load();
+</script>
+</body>
+</html>

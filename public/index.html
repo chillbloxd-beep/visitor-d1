@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cloudflare D1 Analytics V2</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { max-width: 820px; margin: 64px auto; padding: 0 20px; line-height: 1.55; }
+    .card { border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 18px; padding: 26px; }
+    button, a { display: inline-block; border: 0; border-radius: 10px; padding: 11px 15px; margin: 5px 5px 5px 0; background: currentColor; color: Canvas; text-decoration: none; cursor: pointer; }
+    code { background: color-mix(in srgb, currentColor 8%, transparent); padding: 2px 5px; border-radius: 5px; }
+    #status { min-height: 24px; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Cloudflare D1 Analytics V2</h1>
+    <p>The tracker is active. It records page/session analytics, engagement, performance and JavaScript errors. Precise location remains optional.</p>
+    <button id="demo-event">Send demo conversion</button>
+    <button id="location">Share precise location</button>
+    <a href="/dashboard.html">Open dashboard</a>
+    <p id="status"></p>
+  </main>
+
+  <script src="/tracker.js"></script>
+  <script>
+    const status = document.querySelector("#status");
+
+    document.querySelector("#demo-event").addEventListener("click", async () => {
+      await visitorAnalytics.track("demo_conversion", { plan: "starter" }, "conversion");
+      status.textContent = "Demo conversion saved.";
+    });
+
+    document.querySelector("#location").addEventListener("click", async () => {
+      const result = await visitorAnalytics.requestPreciseLocation();
+      status.textContent = result.ok
+        ? "Location saved with permission."
+        : `Location not saved: ${result.reason}`;
+    });
+  </script>
+</body>
+</html>
