@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "visitor-analytics-d1-fresh",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-15",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "triggers": {
+    "crons": [
+      "17 3 * * *"
+    ]
+  },
+  "vars": {
+    "ALLOWED_ORIGINS": "*",
+    "RETENTION_DAYS": "180"
+  },
+  "d1_databases": []
+}

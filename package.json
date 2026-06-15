@@ -1,0 +1,21 @@
+{
+  "name": "visitor-analytics-d1-fresh",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "db:schema:local": "wrangler d1 migrations apply DB --local",
+    "db:schema:remote": "wrangler d1 migrations apply DB --remote",
+    "check": "node --check src/index.js && node --check public/tracker.js && node --check scripts/setup.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "description": "Greenfield visitor analytics built with Cloudflare Workers and D1."
+}
